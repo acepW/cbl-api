@@ -4,22 +4,36 @@ const SparepartProblem = require("../../model/mtc/sparepartProblem");
 
 const masterSparepartController = {
   getMasterSparepart: async (req, res) => {
-    const { nama_mesin, posisi_part, kode, jenis_part } = req.query;
+    const { id_mesin, nama_mesin, posisi_part, kode, jenis_part, page, limit } =
+      req.query;
 
     let obj = {};
+    let offset = (page - 1) * limit;
+    if (id_mesin) obj.id_mesin = id_mesin;
     if (nama_mesin) obj.nama_mesin = nama_mesin;
     if (posisi_part) obj.posisi_part = posisi_part;
     if (kode) obj.kode = kode;
     if (jenis_part) obj.jenis_part = jenis_part;
 
-    console.log(obj);
-
     try {
-      const response = await masterSparepart.findAll({
-        where: obj,
-        include: [{ model: masterMesin, as: "mesin" }],
-      });
-      res.status(200).json(response);
+      if (page && limit) {
+        const response = await masterSparepart.findAll({
+          limit,
+          offset,
+          where: obj,
+          include: [{ model: masterMesin, as: "mesin" }],
+        });
+        const length_data = await masterMesin.count({ where: obj });
+        res
+          .status(200)
+          .json({ data: response, total_page: Math.ceil(length_data / limit) });
+      } else {
+        const response = await masterSparepart.findAll({
+          where: obj,
+          include: [{ model: masterMesin, as: "mesin" }],
+        });
+        res.status(200).json(response);
+      }
     } catch (error) {
       res.status(500).json({ msg: error.message });
     }
@@ -54,39 +68,70 @@ const masterSparepartController = {
       actual_umur,
       sisa_umur,
       keterangan,
+      jenis_part,
     } = req.body;
-    if (
-      !id_mesin ||
-      !nama_sparepart ||
-      !kode ||
-      !posisi_part ||
-      !tgl_pasang ||
-      !tgl_rusak ||
-      !umur_a ||
-      !umur_grade ||
-      !grade_2 ||
-      !actual_umur ||
-      !sisa_umur
-    )
-      return res.status(404).json({ msg: "incomplete data!!" });
+    if (jenis_part == "ganti") {
+      if (
+        !id_mesin ||
+        !nama_sparepart ||
+        !kode ||
+        !posisi_part ||
+        !tgl_pasang ||
+        !tgl_rusak ||
+        !umur_a ||
+        !umur_grade ||
+        !grade_2 ||
+        !actual_umur ||
+        !sisa_umur
+      )
+        return res.status(404).json({ msg: "incomplete data!!" });
+    } else {
+      if (
+        !id_mesin ||
+        !nama_sparepart ||
+        !kode ||
+        !posisi_part ||
+        !tgl_pasang ||
+        !tgl_rusak ||
+        !sisa_umur
+      )
+        return res.status(404).json({ msg: "incomplete data!!" });
+    }
 
     try {
-      const response = await masterSparepart.create({
-        id_mesin,
-        nama_mesin,
-        kode,
-        nama_sparepart,
-        posisi_part,
-        tgl_pasang,
-        tgl_rusak,
-        umur_a,
-        umur_grade,
-        grade_2,
-        actual_umur,
-        sisa_umur,
-        keterangan,
-      });
-      res.status(200).json(response);
+      if (jenis_part == "ganti") {
+        const response = await masterSparepart.create({
+          id_mesin,
+          nama_mesin,
+          kode,
+          nama_sparepart,
+          posisi_part,
+          tgl_pasang,
+          tgl_rusak,
+          jenis_part,
+          umur_a,
+          umur_grade,
+          grade_2,
+          actual_umur,
+          sisa_umur,
+          keterangan,
+        });
+        res.status(200).json(response);
+      } else {
+        const response = await masterSparepart.create({
+          id_mesin,
+          nama_mesin,
+          kode,
+          nama_sparepart,
+          posisi_part,
+          tgl_pasang,
+          tgl_rusak,
+          jenis_part,
+          umur_service: sisa_umur,
+          keterangan,
+        });
+        res.status(200).json(response);
+      }
     } catch (error) {
       res.status(500).json({ msg: error.message });
     }

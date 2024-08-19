@@ -1,7 +1,7 @@
 const { Sequelize } = require("sequelize");
-const db = require("../../../../config/database");
+const db = require("../../../../../config/database");
 const { DataTypes } = Sequelize;
-const masterMesin = require("../../masterMesinModel");
+const masterMesin = require("../../../masterMesinModel");
 
 const inspectionPointPm1Master = db.define("ms_inspection_point_pm1", {
   id_mesin: {
@@ -17,6 +17,10 @@ const inspectionPointPm1Master = db.define("ms_inspection_point_pm1", {
     allowNull: false,
   },
   inspection_point: {
+    type: DataTypes.STRING,
+    allowNull: false,
+  },
+  category: {
     type: DataTypes.STRING,
     allowNull: false,
   },

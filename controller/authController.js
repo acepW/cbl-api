@@ -2,6 +2,7 @@ const Users = require("../model/userModel");
 const { generate_access_token } = require("../utils/jwt");
 const authMiddlewares = require("../middlewares/authMiddlewares");
 const bcrypt = require("bcryptjs");
+const Notification = require("../model/notificationModel");
 
 const authController = {
   Login: async (req, res) => {
@@ -47,15 +48,28 @@ const authController = {
   Me: async (req, res, next) => {
     if (!req.cookies.access_token)
       return res.status(401).json({ msg: "Pliss Login" });
-    console.log(req.cookies.access_token);
 
     const uuid = req.user.uuid;
 
     const users = await Users.findOne({
-      attributes: ["id", "uuid", "nama", "email", "role", "no", "status"],
+      attributes: [
+        "id",
+        "uuid",
+        "nama",
+        "email",
+        "role",
+        "no",
+        "status",
+        "bagian",
+      ],
       where: {
         uuid: uuid,
       },
+      include: [
+        {
+          model: Notification,
+        },
+      ],
     });
     if (!users) return res.status(404).json({ msg: "User Not Found" });
     res.status(200).json(users);

@@ -2,6 +2,7 @@ const { Sequelize } = require("sequelize");
 const db = require("../../config/database");
 
 const StokSparepart = require("./stokSparepart");
+const Users = require("../userModel");
 
 const { DataTypes } = Sequelize;
 
@@ -12,7 +13,23 @@ const RequestStokSparepart = db.define(
       type: DataTypes.INTEGER,
       allowNull: false,
       references: {
-        model: StokSparepart,
+        model: Users,
+        key: "id",
+      },
+    },
+    id_user: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: Users,
+        key: "id",
+      },
+    },
+    id_qc: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: {
+        model: Users,
         key: "id",
       },
     },
@@ -27,6 +44,11 @@ const RequestStokSparepart = db.define(
     qty: {
       type: DataTypes.INTEGER,
       allowNull: true,
+    },
+    qty_update: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      defaultValue: 0,
     },
     tgl_permintaan_kedatangan: {
       type: DataTypes.DATE,
@@ -73,13 +95,28 @@ const RequestStokSparepart = db.define(
     status_pengajuan: {
       type: DataTypes.STRING,
       allowNull: true,
+      defaultValue: "request to mtc",
     },
     tgl_aktual: {
       type: DataTypes.DATE,
       allowNull: true,
     },
+    status_spb: {
+      type: DataTypes.STRING,
+      allowNull: true,
+      defaultValue: "progres",
+    },
 
     note: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+
+    note_verifikasi: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    note_validasi: {
       type: DataTypes.STRING,
       allowNull: true,
     },
@@ -94,6 +131,22 @@ StokSparepart.hasMany(RequestStokSparepart, {
 }),
   RequestStokSparepart.belongsTo(StokSparepart, {
     foreignKey: "id_stok_sparepart",
+  });
+
+Users.hasMany(RequestStokSparepart, {
+  foreignKey: "id_user",
+}),
+  RequestStokSparepart.belongsTo(Users, {
+    foreignKey: "id_user",
+    as: "pelapor",
+  });
+
+Users.hasMany(RequestStokSparepart, {
+  foreignKey: "id_qc",
+}),
+  RequestStokSparepart.belongsTo(Users, {
+    foreignKey: "id_qc",
+    as: "qc",
   });
 
 module.exports = RequestStokSparepart;

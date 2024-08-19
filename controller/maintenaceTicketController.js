@@ -8,6 +8,7 @@ const StokSparepart = require("../model/mtc/stokSparepart");
 const MasterSparepart = require("../model/masterData/masterSparepart");
 const ProsesMtc = require("../model/mtc/prosesMtc");
 const Sequelize = require("sequelize");
+const { createNotification } = require("./notificationController");
 const ticketController = {
   getTicket: async (req, res) => {
     try {
@@ -80,11 +81,12 @@ const ticketController = {
       }
       const data = await Ticket.count({ where: obj });
       const response = await Ticket.findAll(options);
-      console.log(data);
-      console.log(Math.ceil(data / limit));
+
       res.status(200).json({
         total_page: Math.ceil(data / limit),
         data: response,
+        offset: page,
+        limit: limit,
       });
     } catch (error) {
       res.status(500).json({ msg: error.message });
@@ -239,7 +241,13 @@ const ticketController = {
         nama_kendala: nama_kendala,
         kode_ticket: kodeTicket,
       }),
-        res.status(201).json({ msg: "Ticket create Successfuly" });
+        createNotification(
+          "maintenance",
+          "os2",
+          "Tiket Os2 Baru",
+          `tiket os2 baru dengan kendala ${nama_kendala} di mesin ${mesin}`
+        );
+      res.status(201).json({ msg: "Ticket create Successfuly" });
     } catch (error) {
       res.status(400).json({ msg: error.message });
     }
@@ -264,6 +272,44 @@ const ticketController = {
     if (tipe_mtc) obj.tipe_mtc = tipe_mtc;
     if (id_qc) obj.id_qc = id_qc;
 
+    try {
+      await Ticket.update(obj, { where: { id: _id } }),
+        res.status(201).json({ msg: "Ticket update Successfuly" });
+    } catch (error) {
+      res.status(400).json({ msg: error.message });
+    }
+  },
+
+  validasiQcTiket: async (req, res) => {
+    const _id = req.params.id;
+    const { note_qc } = req.body;
+
+    let obj = {
+      bagian_tiket: "incoming",
+      id_respon_qc: req.user.id,
+      status_qc: "di validasi",
+      waktu_respon_qc: new Date(),
+      note_qc: note_qc,
+    };
+    try {
+      await Ticket.update(obj, { where: { id: _id } }),
+        res.status(201).json({ msg: "Ticket update Successfuly" });
+    } catch (error) {
+      res.status(400).json({ msg: error.message });
+    }
+  },
+
+  rejectQcTiket: async (req, res) => {
+    const _id = req.params.id;
+    const { note_qc } = req.body;
+
+    let obj = {
+      bagian_tiket: "reject",
+      status_qc: "di tolak",
+      id_respon_qc: req.user.id,
+      waktu_respon_qc: new Date(),
+      note_qc: note_qc,
+    };
     try {
       await Ticket.update(obj, { where: { id: _id } }),
         res.status(201).json({ msg: "Ticket update Successfuly" });
@@ -349,6 +395,69 @@ const ticketController = {
       } catch (error) {
         res.status(400).json({ msg: error.message });
       }
+    }
+  },
+  injectDataTicket: async (req, res) => {
+    const {
+      mesin,
+      operator,
+      tgl_tiket,
+      waktu_tiket,
+      nama_kendala,
+      kode_ticket,
+      bagian_tiket,
+      tgl_respon,
+      waktu_respon,
+      id_eksekutor,
+      tgl_selesai_mtc,
+      waktu_selesai_mtc,
+      skor_mtc,
+      cara_perbaikan,
+      kode_analisis_mtc,
+      nama_analisis_mtc,
+      note_mtc,
+    } = req.body;
+    try {
+      const tanggalRespon = new Date(tgl_respon + " " + waktu_respon);
+      const tglTiket = new Date(tgl_tiket + " " + waktu_tiket);
+      const tanggalSelesaiMtc = new Date(
+        tgl_selesai_mtc + " " + waktu_selesai_mtc
+      );
+
+      const ticket = await Ticket.create({
+        mesin: mesin,
+        operator: operator,
+        tgl: tglTiket,
+        jenis_kendala: "mesin",
+        nama_kendala: nama_kendala,
+        kode_ticket: kode_ticket,
+        bagian_tiket: bagian_tiket,
+        status_tiket: "monitoring",
+        id_respon_mtc: id_eksekutor,
+        waktu_respon: tanggalRespon,
+        waktu_mulai_mtc: tanggalRespon,
+        waktu_selesai_mtc: tanggalSelesaiMtc,
+        createdAt: tglTiket,
+        skor_mtc: skor_mtc,
+        cara_perbaikan: cara_perbaikan,
+        kode_analisis_mtc: kode_analisis_mtc,
+        nama_analisis_mtc: nama_analisis_mtc,
+      });
+      await ProsesMtc.create({
+        id_tiket: ticket.id,
+        id_eksekutor: id_eksekutor,
+        status_proses: "monitoring",
+        waktu_mulai_mtc: tanggalRespon,
+        waktu_selesai_mtc: waktu_selesai_mtc,
+        skor_mtc: skor_mtc,
+        cara_perbaikan: cara_perbaikan,
+        kode_analisis_mtc: kode_analisis_mtc,
+        nama_analisis_mtc: nama_analisis_mtc,
+        note_mtc: note_mtc,
+      });
+      res.status(201).json({ msg: "berhasil" });
+    } catch (error) {
+      res.status(400).json({ msg: error.message });
     }
   },
 };

@@ -1,8 +1,8 @@
 const { Sequelize, where } = require("sequelize");
 const { Op } = require("sequelize");
 const MasterMesin = require("../../../model/masterData/masterMesinModel");
-const MasterPointPm1 = require("../../../model/masterData/mtc/preventive/inspenctionPoinPm1Model");
-const MasterTaskPm1 = require("../../../model/masterData/mtc/preventive/inspectionTaskPm1Model");
+const MasterPointPm1 = require("../../../model/masterData/mtc/preventive/pm1/inspenctionPoinPm1Model");
+const MasterTaskPm1 = require("../../../model/masterData/mtc/preventive/pm1/inspectionTaskPm1Model");
 const TicketPm1 = require("../../../model/mtc/preventive/pm1/ticketPm1");
 const PointPm1 = require("../../../model/mtc/preventive/pm1/pointPm1");
 const TaskPm1 = require("../../../model/mtc/preventive/pm1/taskPm1");
@@ -11,11 +11,24 @@ const TicketOs3 = require("../../../model/maintenanceTicketOs3Model");
 
 const Pm1Controller = {
   getPm1: async (req, res) => {
-    const { nama_mesin, id_inspector, start_date, end_date, tgl } = req.query;
+    const {
+      id_mesin,
+      nama_mesin,
+      id_inspector,
+      start_date,
+      end_date,
+      status,
+      tgl,
+      limit,
+      page,
+    } = req.query;
 
     let obj = {};
     let des = [];
+    let offset = (page - 1) * limit;
+    if (id_mesin) obj.id_mesin = id_mesin;
     if (nama_mesin) obj.nama_mesin = nama_mesin;
+    if (status) obj.status = status;
     if (id_inspector) obj.id_inspector = id_inspector;
     if (tgl)
       obj.tgl = {
@@ -42,33 +55,68 @@ const Pm1Controller = {
     }
 
     try {
-      const response = await TicketPm1.findAll({
-        where: obj,
-        order: des,
-        include: [
-          {
-            model: Users,
-            as: "inspector",
-          },
-          {
-            model: Users,
-            as: "leader",
-          },
-          {
-            model: Users,
-            as: "supervisor",
-          },
-          {
-            model: Users,
-            as: "ka_bag",
-          },
-          {
-            model: MasterMesin,
-            as: "mesin",
-          },
-        ],
-      });
-      res.status(200).json(response);
+      if (page && limit) {
+        const length_data = await TicketPm1.count({ where: obj });
+        const response = await TicketPm1.findAll({
+          where: obj,
+          order: des,
+          include: [
+            {
+              model: Users,
+              as: "inspector",
+            },
+            {
+              model: Users,
+              as: "leader",
+            },
+            {
+              model: Users,
+              as: "supervisor",
+            },
+            {
+              model: Users,
+              as: "ka_bag",
+            },
+            {
+              model: MasterMesin,
+              as: "mesin",
+            },
+          ],
+          limit: parseInt(limit),
+          offset: parseInt(offset),
+        });
+        res
+          .status(200)
+          .json({ data: response, total_page: Math.ceil(length_data / limit) });
+      } else {
+        const response = await TicketPm1.findAll({
+          where: obj,
+          order: des,
+          include: [
+            {
+              model: Users,
+              as: "inspector",
+            },
+            {
+              model: Users,
+              as: "leader",
+            },
+            {
+              model: Users,
+              as: "supervisor",
+            },
+            {
+              model: Users,
+              as: "ka_bag",
+            },
+            {
+              model: MasterMesin,
+              as: "mesin",
+            },
+          ],
+        });
+        res.status(200).json(response);
+      }
     } catch (error) {
       res.status(500).json({ msg: error.message });
     }
@@ -85,6 +133,7 @@ const Pm1Controller = {
               "id",
               "lama_pengerjaan",
               "inspection_point",
+              "category",
               "id_ticket",
               "tgl",
               "hasil",
@@ -153,6 +202,7 @@ const Pm1Controller = {
           const point = await PointPm1.create({
             id_ticket: ticket.id,
             inspection_point: masterPoint[ii].inspection_point,
+            category: masterPoint[ii].category,
             tgl: new Date(),
           });
 
@@ -189,6 +239,7 @@ const Pm1Controller = {
       const point = await PointPm1.create({
         id_ticket: id_ticket,
         inspection_point: inspection_point.inspection_point,
+        category: inspection_point.category,
         tgl: new Date(),
       });
 
@@ -257,19 +308,21 @@ const Pm1Controller = {
       );
       const dataPoint = await PointPm1.findOne({
         where: { id: _id },
-        attributes: ["id", "id_ticket", "hasil"],
+        attributes: ["id", "id_ticket", "hasil", "category"],
       });
 
       if (dataPoint.hasil == "jelek" || dataPoint.hasil == "tidak terpasang") {
         const ticketPm1 = await TicketPm1.findOne({
           where: { id: dataPoint.id_ticket },
         });
-        const ticketOs3 = await TicketOs3.create({
-          id_point_pm1: dataPoint.id,
-          nama_mesin: ticketPm1.nama_mesin,
-          sumber: "pm1",
-          status_tiket: "open",
-        });
+        if (dataPoint.category != "man") {
+          await TicketOs3.create({
+            id_point_pm1: dataPoint.id,
+            nama_mesin: ticketPm1.nama_mesin,
+            sumber: "pm1",
+            status_tiket: "open",
+          });
+        }
       }
       res.status(200).json({ msg: "success" });
     } catch (error) {
@@ -297,9 +350,15 @@ const Pm1Controller = {
   doneTicketPm1: async (req, res) => {
     const _id = req.params.id;
     const { catatan, id_leader, id_supervisor, id_ka_bag } = req.body;
-    if (!id_leader || !id_supervisor || !id_ka_bag || !catatan)
-      return res.status(401).json({ msg: "incomplite data" });
+
+    if (!catatan) return res.status(400).json({ msg: "catatan wajib di isi" });
+
     try {
+      const checkPointDone = await PointPm1.findAll({
+        where: { id_ticket: _id, hasil: null },
+      });
+      if (checkPointDone.length > 0)
+        return res.status(400).json({ msg: "Point PM Wajib Di isi Semua" });
       const response = await TicketPm1.update(
         {
           waktu_selesai: new Date(),
